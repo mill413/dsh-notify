@@ -1,0 +1,24 @@
+# pnpm settings for this single-package repository. Every dependency comes from
+# npm; no workspace members are declared.
+allowBuilds:
+  esbuild: true
+  # SDK native runtime providers are not needed to build this plugin.
+  koffi: false
+  node-pty: false
+
+# The pinned SDK prerelease is younger than pnpm's install-age gate; these are
+# the exact versions this repository was verified against.
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/cordis@4.0.4'
+  - '@deepseek-ai/dsh-api-session-controller@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-client-locale@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-client-store@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-client-ui-primitives@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-client-ui-session@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-client-ui-settings@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-client-ui-slots@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-client-ui-workspace@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-api-workspace-controller@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-session@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-settings@0.1.7-rc.2'
+  - '@deepseek-ai/schemastery@3.18.4'

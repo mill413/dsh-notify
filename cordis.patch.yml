@@ -1,0 +1,9 @@
+# dsh-notify bundle patch: one plugin row.
+#
+# The host half carries no service of its own — it exists so the entry has a
+# `Config` (the notification preferences) that the settings service projects
+# into this entry's form. The browser half is discovered through the package's
+# `dsh.client` declaration and does the actual notification work.
+- insert:
+    - id: dsh-notify
+      name: '@mill413/dsh-notify'
