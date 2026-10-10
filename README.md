@@ -36,7 +36,7 @@ pnpm test         # notify-core 的差分规则
 pnpm run build    # tsc 出 node 半 + esbuild 出 lib/client.js
 ```
 
-依赖全部来自 npm，固定为经验证的宿主版本 `0.2.0-rc.1`；不引用 harness checkout。
+依赖全部来自 npm，固定为经验证的宿主版本 `0.2.0-rc.2`；不引用 harness checkout。
 
 ## 安装
 
