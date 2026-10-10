@@ -38,6 +38,7 @@ import {
   showSystemNotification,
 } from './notifications.ts'
 import { createPrefsLive, NS, type NotifyPrefs } from './prefs.ts'
+import { requestTestPush } from './push-client.ts'
 import { createTriggerLog, type TriggerLog } from './trigger-log.ts'
 import { en, zh, type NotifyKey } from './locales.ts'
 
@@ -174,6 +175,7 @@ function installSettingsCard(
     environment: notifyEnvironment,
     requestPermission: requestNotifyPermission,
     showTest: (title, body) => showSystemNotification({ title, body, tag: 'dsh-notify-test' }),
+    testPush: requestTestPush,
   }
   slots.inject('plugins.bundle.config', () => slots.register({
     name: 'plugins.bundle.config',

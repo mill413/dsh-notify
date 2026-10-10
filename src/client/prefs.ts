@@ -16,6 +16,31 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls `ctx.configForms` (the shared configuration form service).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: the path-addressed edit the settings wire accepts.
+import type { SettingsPathOpView } from '@deepseek-ai/dsh-settings/types'
+
+/** Request methods the card offers; mirrors the Host half's `PUSH_METHODS`. */
+export const ENDPOINT_METHODS = ['POST', 'PUT', 'PATCH', 'GET'] as const
+
+/** One method of {@link ENDPOINT_METHODS}. */
+export type EndpointMethod = (typeof ENDPOINT_METHODS)[number]
+
+/** One configured request header. */
+export interface EndpointHeader {
+  /** Header name; a blank name is an unfinished row and is not sent. */
+  name: string
+  /** Header value, sent verbatim. */
+  value: string
+  /** Rows travel the settings wire as plain JSON objects; the index signature says so. */
+  [key: string]: string
+}
+
+/**
+ * Fallback body template, mirroring the Host half's `DEFAULT_BODY_TEMPLATE`: it
+ * only applies before the first form read, and the two must agree so a card
+ * that renders the shipped default cannot save a different one by accident.
+ */
+export const DEFAULT_BODY_TEMPLATE = '{"title":"{{title}}","body":"{{body}}","level":"{{level}}","group":"{{group}}"}'
 
 /** Notification preferences owned by the browser half. */
 export interface NotifyPrefs {
@@ -25,9 +50,24 @@ export interface NotifyPrefs {
   notifyOnComplete: boolean
   /** Notify when an Agent is waiting for approval or an answer. */
   notifyOnInteraction: boolean
-  /** Suppress notifications while the page is visible and focused. */
+  /** Suppress browser notifications while the page is visible and focused. */
   onlyWhenBackground: boolean
+  /** Master switch for delivering to the custom endpoint. */
+  endpointEnabled: boolean
+  /** Absolute http(s) URL, path included. */
+  endpointUrl: string
+  /** Request method; `GET` carries no body. */
+  endpointMethod: EndpointMethod
+  /** Extra request headers, sent verbatim. */
+  endpointHeaders: EndpointHeader[]
+  /** Body template rendered against the trigger's variables. */
+  endpointBody: string
 }
+
+/** Toggle-valued preference keys: the ones a Switch renders. */
+export type NotifyToggleKey = {
+  [K in keyof NotifyPrefs]: NotifyPrefs[K] extends boolean ? K : never
+}[keyof NotifyPrefs]
 
 /** Default values match the shipped behaviour and the Host Config schema. */
 export const PREFS_DEFAULTS: NotifyPrefs = {
@@ -35,6 +75,13 @@ export const PREFS_DEFAULTS: NotifyPrefs = {
   notifyOnComplete: true,
   notifyOnInteraction: true,
   onlyWhenBackground: true,
+  // Off until a URL is configured: an enabled channel with no destination only
+  // produces failures in the log.
+  endpointEnabled: false,
+  endpointUrl: '',
+  endpointMethod: 'POST',
+  endpointHeaders: [],
+  endpointBody: DEFAULT_BODY_TEMPLATE,
 }
 
 /**
@@ -96,8 +143,9 @@ export function createPrefsLive(ctx: ClientContext): PrefsLive {
       const next = normalizePrefs(value)
       // One revision-fenced write for every field: the toggles describe one
       // coherent notification policy and must never land half-applied.
-      const landed = await form.mutate((Object.keys(next) as Array<keyof NotifyPrefs>)
-        .map((key) => ({ op: 'set' as const, path: [key], value: next[key] })))
+      const ops: SettingsPathOpView[] = (Object.keys(next) as Array<keyof NotifyPrefs>)
+        .map((key) => ({ op: 'set', path: [key], value: next[key] }))
+      const landed = await form.mutate(ops)
       if (!landed) throw new Error('Settings write was refused')
       reconsider()
     },
@@ -109,32 +157,69 @@ export function createPrefsLive(ctx: ClientContext): PrefsLive {
   }
 }
 
+/** Coerce one header row, dropping anything that is not a pair of strings. */
+function normalizeHeaders(value: unknown): EndpointHeader[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
+    .map(row => ({
+      name: typeof row.name === 'string' ? row.name : '',
+      value: typeof row.value === 'string' ? row.value : '',
+    }))
+}
+
 /**
- * Coerce a possibly partial document into complete booleans; a legacy or
+ * Coerce a possibly partial document into complete values; a legacy or
  * hand-edited patch value of the wrong type falls back to the default.
  * @param value - candidate document.
  * @returns a complete preference document.
  */
 export function normalizePrefs(value: Partial<NotifyPrefs>): NotifyPrefs {
-  const bool = (key: keyof NotifyPrefs): boolean =>
+  const bool = (key: NotifyToggleKey): boolean =>
     typeof value[key] === 'boolean' ? value[key] : PREFS_DEFAULTS[key]
+  const method = ENDPOINT_METHODS.find(candidate => candidate === value.endpointMethod)
   return {
     enabled: bool('enabled'),
     notifyOnComplete: bool('notifyOnComplete'),
     notifyOnInteraction: bool('notifyOnInteraction'),
     onlyWhenBackground: bool('onlyWhenBackground'),
+    endpointEnabled: bool('endpointEnabled'),
+    endpointUrl: typeof value.endpointUrl === 'string' ? value.endpointUrl : PREFS_DEFAULTS.endpointUrl,
+    endpointMethod: method ?? PREFS_DEFAULTS.endpointMethod,
+    endpointHeaders: normalizeHeaders(value.endpointHeaders),
+    endpointBody: typeof value.endpointBody === 'string' ? value.endpointBody : PREFS_DEFAULTS.endpointBody,
   }
+}
+
+/** Structural equality for the JSON-shaped values a preference field holds. */
+function sameValue(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return false
+    return left.length === right.length && left.every((item, index) => sameValue(item, right[index]))
+  }
+  if (typeof left === 'object' && left !== null && typeof right === 'object' && right !== null) {
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+    return [...keys].every(key => sameValue(
+      (left as Record<string, unknown>)[key],
+      (right as Record<string, unknown>)[key],
+    ))
+  }
+  return left === right
 }
 
 /**
  * Whether two preference documents carry the same values.
+ *
+ * The comparison is structural because a document holds an array of header
+ * rows: reference equality would report an untouched draft as edited and leave
+ * the save button permanently armed.
  * @param left - one document.
  * @param right - the other.
  * @returns whether every field matches.
  */
 export function samePrefs(left: NotifyPrefs, right: NotifyPrefs): boolean {
   return (Object.keys(PREFS_DEFAULTS) as Array<keyof NotifyPrefs>)
-    .every(key => left[key] === right[key])
+    .every(key => sameValue(left[key], right[key]))
 }
 
 /**
@@ -142,7 +227,7 @@ export function samePrefs(left: NotifyPrefs, right: NotifyPrefs): boolean {
  * persisted document.
  *
  * The card preserves an edit the user has not saved, so a Host push for an
- * unrelated reason cannot silently discard a flip the user just made. The
+ * unrelated reason cannot silently discard a change the user just made. The
  * comparison is against the *previous* published document rather than the new
  * one: before the first read there is no previous document, so the first read
  * always adopts the persisted values — a card that started from the shipped

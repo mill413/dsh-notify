@@ -14,8 +14,10 @@
     ],
     "rootDir": "src",
     "outDir": "lib",
-    "declarationDir": "lib/types"
+    "declarationDir": "lib/types",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true
   },
-  "include": ["src/index.ts"],
+  "include": ["src/index.ts", "src/push.ts"],
   "exclude": ["src/client", "lib", "node_modules"]
 }

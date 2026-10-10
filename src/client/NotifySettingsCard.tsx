@@ -13,9 +13,25 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { IconChevronDownOutlineRegular, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
-import { adoptDraft, PREFS_DEFAULTS, type NotifyPrefs, type PrefsLive } from './prefs.ts'
+import {
+  IconChevronDownOutlineRegular,
+  IconCloseOutlineRegular,
+  IconPlusOutlineRegular,
+  Input,
+  Switch,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  adoptDraft,
+  ENDPOINT_METHODS,
+  PREFS_DEFAULTS,
+  samePrefs,
+  type EndpointHeader,
+  type NotifyPrefs,
+  type NotifyToggleKey,
+  type PrefsLive,
+} from './prefs.ts'
 import type { NotifyEnvironment, NotifyPermission } from './notifications.ts'
+import type { PushTestDraft, PushTestOutcome } from './push-client.ts'
 import type { TriggerRecord, TriggerLog } from './trigger-log.ts'
 import type { NotifyKey } from './locales.ts'
 
@@ -33,10 +49,12 @@ export interface NotifySettingsCardInjected {
   requestPermission: () => Promise<NotifyPermission>
   /** Show one test notification; @returns whether it was shown. */
   showTest: (title: string, body: string) => boolean
+  /** Ask the node half to deliver one notification to this endpoint; @returns its outcome. */
+  testPush: (draft: PushTestDraft) => Promise<PushTestOutcome>
 }
 
 /** The persistence-backed toggles, in display order. */
-const FIELDS: ReadonlyArray<{ key: keyof NotifyPrefs; label: NotifyKey; hint: NotifyKey }> = [
+const FIELDS: ReadonlyArray<{ key: NotifyToggleKey; label: NotifyKey; hint: NotifyKey }> = [
   { key: 'enabled', label: 'card.field.enabled', hint: 'card.field.enabled.desc' },
   { key: 'notifyOnComplete', label: 'card.field.notifyOnComplete', hint: 'card.field.notifyOnComplete.desc' },
   { key: 'notifyOnInteraction', label: 'card.field.notifyOnInteraction', hint: 'card.field.notifyOnInteraction.desc' },
@@ -82,6 +100,22 @@ function ensureCardStyle(): void {
     .dsn-pending { flex: none; border-radius: 999px; padding: 1px 8px; font-size: 11px; line-height: 17px; font-weight: 500; white-space: nowrap; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); }
     .dsn-field { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; }
     .dsn-field + .dsn-field { border-top: 1px solid var(--dsw-alias-border-l2); }
+    .dsn-section { margin-top: 4px; font-size: 13px; font-weight: 600; line-height: 1.5; color: var(--dsw-alias-label-secondary); }
+    .dsn-input { display: flex; width: 100%; }
+    .dsn-select { appearance: none; height: 32px; padding: 0 8px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; cursor: pointer; }
+    .dsn-select:focus-visible { outline: none; border-color: var(--dsw-alias-state-business-primary); }
+    .dsn-select:disabled { opacity: .5; cursor: default; }
+    .dsn-textarea { width: 100%; min-height: 72px; padding: 6px 8px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; resize: vertical; }
+    .dsn-textarea::placeholder { color: var(--dsw-alias-label-dimmed); }
+    .dsn-textarea:focus-visible { outline: none; border-color: var(--dsw-alias-state-business-primary); }
+    .dsn-textarea:disabled { opacity: .5; cursor: default; }
+    .dsn-headerRow { display: flex; align-items: center; gap: 8px; }
+    .dsn-headerName { flex: 0 1 42%; }
+    .dsn-headerValue { flex: 1 1 58%; }
+    .dsn-iconButton { appearance: none; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--dsw-alias-label-tertiary); cursor: pointer; }
+    .dsn-iconButton:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
+    .dsn-iconButton:disabled { opacity: .5; cursor: default; }
+    .dsn-iconButton:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
     .dsn-toggleRow { display: flex; align-items: center; gap: 12px; }
     .dsn-toggleLabel { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; line-height: 1.5; color: var(--dsw-alias-label-primary); }
     .dsn-hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-tertiary); }
@@ -106,7 +140,7 @@ function ensureCardStyle(): void {
 
 /** Render the dsh-notify settings card. */
 export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): React.ReactElement | null {
-  const { prefs, t, triggers, environment, requestPermission, showTest } = props
+  const { prefs, t, triggers, environment, requestPermission, showTest, testPush } = props
   const persistedRef = useRef<NotifyPrefs | null>(null)
   const [open, setOpen] = useState(false)
   const [persisted, setPersisted] = useState<NotifyPrefs | null>(null)
@@ -117,6 +151,8 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
   const [env, setEnv] = useState<NotifyEnvironment | null>(null)
   const [notice, setNotice] = useState<NotifyKey | null>(null)
   const [trigger, setTrigger] = useState<TriggerRecord | undefined>(undefined)
+  const [testing, setTesting] = useState(false)
+  const [pushNotice, setPushNotice] = useState<string | null>(null)
 
   useEffect(() => {
     if (prefs === undefined || t === undefined) return undefined
@@ -156,7 +192,9 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
 
   if (prefs === undefined || t === undefined || persisted === null) return null
 
-  const dirty = FIELDS.some(({ key }) => draft[key] !== persisted[key])
+  // One structural comparison over the whole document: the endpoint fields are
+  // part of the same atomic save as the toggles.
+  const dirty = !samePrefs(draft, persisted)
   const disabled = !writable || saving
   const permission = env?.permission ?? 'default'
 
@@ -165,8 +203,42 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
     setSaving(true)
     setFailed(false)
     prefs.save(draft)
-      .then(() => { setDraft(prefs.get()); setSaving(false) })
+      .then(() => {
+        setDraft(prefs.get())
+        setPushNotice(null)
+        setSaving(false)
+      })
       .catch(() => { setFailed(true); setSaving(false) })
+  }
+
+  const patch = (change: Partial<NotifyPrefs>): void => {
+    setFailed(false)
+    setDraft((value) => ({ ...value, ...change }))
+  }
+
+  const setHeader = (index: number, change: Partial<EndpointHeader>): void => {
+    patch({
+      endpointHeaders: draft.endpointHeaders.map((row, at) => (at === index
+        ? { name: change.name ?? row.name, value: change.value ?? row.value }
+        : row)),
+    })
+  }
+
+  const runTest = (): void => {
+    if (testPush === undefined || t === undefined) return
+    setPushNotice(null)
+    setTesting(true)
+    void testPush({
+      url: draft.endpointUrl,
+      method: draft.endpointMethod,
+      headers: draft.endpointHeaders,
+      body: draft.endpointBody,
+    })
+      .then((outcome) => {
+        setPushNotice(outcome.ok ? t('push.test.ok') : `${t('push.test.failed')}${outcome.error ?? ''}`)
+        setTesting(false)
+      })
+      .catch(() => { setPushNotice(t('push.test.failed')); setTesting(false) })
   }
 
   const ask = (): void => {
@@ -258,6 +330,123 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
                 <p className="dsn-hint">{t(hint)}</p>
               </div>
             ))}
+
+            <p className="dsn-section">{t('push.section')}</p>
+
+            <div className="dsn-field">
+              <div className="dsn-toggleRow">
+                <span className="dsn-toggleLabel">{t('push.field.enabled')}</span>
+                <Switch
+                  checked={draft.endpointEnabled}
+                  label={t('push.field.enabled')}
+                  disabled={disabled}
+                  onChange={() => { patch({ endpointEnabled: !draft.endpointEnabled }) }}
+                />
+              </div>
+              <p className="dsn-hint">{t('push.field.enabled.desc')}</p>
+            </div>
+
+            <div className="dsn-field">
+              <label className="dsn-toggleLabel" htmlFor="dsn-push-url">{t('push.field.url')}</label>
+              <Input
+                id="dsn-push-url"
+                className="dsn-input"
+                value={draft.endpointUrl}
+                disabled={disabled}
+                placeholder={t('push.field.url.placeholder')}
+                onChange={(event) => { patch({ endpointUrl: event.target.value }) }}
+              />
+              <p className="dsn-hint">{t('push.field.url.desc')}</p>
+            </div>
+
+            <div className="dsn-field">
+              <label className="dsn-toggleLabel" htmlFor="dsn-push-method">{t('push.field.method')}</label>
+              <select
+                id="dsn-push-method"
+                className="dsn-select"
+                value={draft.endpointMethod}
+                disabled={disabled}
+                onChange={(event) => {
+                  const method = ENDPOINT_METHODS.find(candidate => candidate === event.target.value)
+                  if (method !== undefined) patch({ endpointMethod: method })
+                }}
+              >
+                {ENDPOINT_METHODS.map(method => <option key={method} value={method}>{method}</option>)}
+              </select>
+              <p className="dsn-hint">{t('push.field.method.desc')}</p>
+            </div>
+
+            <div className="dsn-field">
+              <span className="dsn-toggleLabel">{t('push.field.headers')}</span>
+              {draft.endpointHeaders.map((row, index) => (
+                // Rows are positional and have no stable identity of their own.
+                // eslint-disable-next-line react/no-array-index-key
+                <div className="dsn-headerRow" key={index}>
+                  <Input
+                    className="dsn-input dsn-headerName"
+                    value={row.name}
+                    disabled={disabled}
+                    placeholder={t('push.field.headers.name')}
+                    aria-label={`${t('push.field.headers.name')} ${index + 1}`}
+                    onChange={(event) => { setHeader(index, { name: event.target.value }) }}
+                  />
+                  <Input
+                    className="dsn-input dsn-headerValue"
+                    value={row.value}
+                    disabled={disabled}
+                    placeholder={t('push.field.headers.value')}
+                    aria-label={`${t('push.field.headers.value')} ${index + 1}`}
+                    onChange={(event) => { setHeader(index, { value: event.target.value }) }}
+                  />
+                  <button
+                    type="button"
+                    className="dsn-iconButton"
+                    disabled={disabled}
+                    aria-label={`${t('push.field.headers.remove')} ${index + 1}`}
+                    onClick={() => {
+                      patch({ endpointHeaders: draft.endpointHeaders.filter((_, at) => at !== index) })
+                    }}
+                  >
+                    <IconCloseOutlineRegular />
+                  </button>
+                </div>
+              ))}
+              <div className="dsn-actions">
+                <button
+                  type="button"
+                  className="dsn-button"
+                  disabled={disabled}
+                  onClick={() => { patch({ endpointHeaders: [...draft.endpointHeaders, { name: '', value: '' }] }) }}
+                >
+                  <IconPlusOutlineRegular />
+                  {t('push.field.headers.add')}
+                </button>
+              </div>
+              <p className="dsn-hint">{t('push.field.headers.desc')}</p>
+            </div>
+
+            <div className="dsn-field">
+              <label className="dsn-toggleLabel" htmlFor="dsn-push-body">{t('push.field.body')}</label>
+              <textarea
+                id="dsn-push-body"
+                className="dsn-textarea"
+                value={draft.endpointBody}
+                disabled={disabled}
+                placeholder={t('push.field.body.placeholder')}
+                onChange={(event) => { patch({ endpointBody: event.target.value }) }}
+              />
+              <p className="dsn-hint">{t('push.field.body.desc')}</p>
+              <p className="dsn-hint">{t('push.field.variables')}</p>
+            </div>
+
+            <div className="dsn-field">
+              <div className="dsn-actions">
+                <button type="button" className="dsn-button" disabled={testing} onClick={runTest}>
+                  {t(testing ? 'push.test.sending' : 'push.test')}
+                </button>
+              </div>
+              {pushNotice !== null ? <p className="dsn-hint" role="status">{pushNotice}</p> : null}
+            </div>
 
             <div className="dsn-footer">
               {failed ? <p className="dsn-failed" role="status">{t('card.failed')}</p> : null}
