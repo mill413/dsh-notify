@@ -29,6 +29,8 @@ jobs:
           exit 1
 
       - name: Checkout
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           git clone --depth 1 --branch "$GITHUB_REF_NAME" \
