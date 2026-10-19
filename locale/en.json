@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Desktop Notifications",
-    "description": "Send browser notifications when a task finishes or waits for your input, and optionally deliver them to a custom HTTP endpoint."
+    "description": "Send browser notifications when a task finishes or waits for you, or push to a custom HTTP endpoint."
   }
 }
