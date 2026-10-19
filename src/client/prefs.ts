@@ -62,6 +62,8 @@ export interface NotifyPrefs {
   endpointHeaders: EndpointHeader[]
   /** Body template rendered against the trigger's variables. */
   endpointBody: string
+  /** Icon URL handed to the template as `{{icon}}`; empty means the field is dropped. */
+  endpointIcon: string
 }
 
 /** Toggle-valued preference keys: the ones a Switch renders. */
@@ -82,6 +84,7 @@ export const PREFS_DEFAULTS: NotifyPrefs = {
   endpointMethod: 'POST',
   endpointHeaders: [],
   endpointBody: DEFAULT_BODY_TEMPLATE,
+  endpointIcon: '',
 }
 
 /**
@@ -188,6 +191,7 @@ export function normalizePrefs(value: Partial<NotifyPrefs>): NotifyPrefs {
     endpointMethod: method ?? PREFS_DEFAULTS.endpointMethod,
     endpointHeaders: normalizeHeaders(value.endpointHeaders),
     endpointBody: typeof value.endpointBody === 'string' ? value.endpointBody : PREFS_DEFAULTS.endpointBody,
+    endpointIcon: typeof value.endpointIcon === 'string' ? value.endpointIcon : PREFS_DEFAULTS.endpointIcon,
   }
 }
 

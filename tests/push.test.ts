@@ -17,7 +17,14 @@ import {
   type PushEndpoint,
 } from '../src/push.ts'
 
-const FACTS = pushFacts('complete', '修复登录', false, 'session-1', Date.UTC(2026, 9, 10, 14, 0, 0))
+const FACTS = pushFacts(
+  'complete',
+  '修复登录',
+  false,
+  'session-1',
+  Date.UTC(2026, 9, 10, 14, 0, 0),
+  'https://example.com/logo.png',
+)
 
 const ENDPOINT: PushEndpoint = {
   url: 'https://example.com/notify',
@@ -40,6 +47,7 @@ test('a completion offers the Session title and normal urgency', () => {
     group: PUSH_GROUP,
     sessionId: 'session-1',
     time: '2026-10-10T14:00:00.000Z',
+    icon: 'https://example.com/logo.png',
   })
 })
 
@@ -78,7 +86,18 @@ test('a JSON template keeps its structure when a value carries JSON syntax', () 
     body: '任务已完成',
     level: 'default',
     group: PUSH_GROUP,
+    icon: '',
   })
+})
+
+test('an unset icon substitutes to an empty string, not the literal placeholder', () => {
+  const body = renderBody('{"title":"{{title}}","icon":"{{icon}}"}', pushFacts('complete', 't', false, 's', 0))
+  assert.deepEqual(JSON.parse(body), { title: 't', icon: '' })
+})
+
+test('a configured icon reaches the template verbatim', () => {
+  const body = renderBody('{"icon":"{{icon}}"}', pushFacts('complete', 't', false, 's', 0, 'https://example.com/a.png'))
+  assert.deepEqual(JSON.parse(body), { icon: 'https://example.com/a.png' })
 })
 
 test('a JSON template nests and keeps its own fields', () => {

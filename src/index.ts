@@ -68,6 +68,12 @@ export interface Config {
   endpointHeaders: Volatile<PushHeader[]>
   /** Body template rendered against the trigger's variables. */
   endpointBody: Volatile<string>
+  /**
+   * Icon URL handed to the template as `{{icon}}`. Must be reachable by the
+   * receiving client, which downloads it itself — a LAN address never works
+   * for a phone receiving through APNs.
+   */
+  endpointIcon: Volatile<string>
 }
 
 /**
@@ -97,6 +103,7 @@ export const Config: z<ConfigValues, Config> = z.object({
     value: z.string().default(''),
   })).default([]).volatile(),
   endpointBody: z.string().default(DEFAULT_BODY_TEMPLATE).volatile(),
+  endpointIcon: z.string().default('').volatile(),
 })
 
 /** Route the browser card posts its test delivery to; the client spells its relative form. */
@@ -134,7 +141,7 @@ function installPush(ctx: Context, config: Config): void {
       return
     }
     const title = ctx.get('sessionTitle')?.get(session)?.title ?? session.id
-    const facts = pushFacts(kind, title, isSubagent(session), session.id, Date.now())
+    const facts = pushFacts(kind, title, isSubagent(session), session.id, Date.now(), config.endpointIcon.get())
     void sendPush(target, facts).then((outcome) => {
       if (outcome.ok) return
       ctx.logger.warn('dsh-notify: custom endpoint delivery failed: %s', outcome.error ?? 'unknown error')
@@ -187,6 +194,7 @@ function readDraft(value: unknown): Partial<{
   method: PushMethod
   headers: PushHeader[]
   body: string
+  icon: string
 }> {
   if (typeof value !== 'object' || value === null) return {}
   const body = value as Record<string, unknown>
@@ -197,6 +205,7 @@ function readDraft(value: unknown): Partial<{
   const url = text('url')
   const method = text('method')
   const template = text('body')
+  const icon = text('icon')
   const headers = readHeaders(body.headers)
   return {
     ...url === undefined ? {} : { url },
@@ -205,6 +214,7 @@ function readDraft(value: unknown): Partial<{
       : { method: method as PushMethod },
     ...headers === undefined ? {} : { headers },
     ...template === undefined ? {} : { body: template },
+    ...icon === undefined ? {} : { icon },
   }
 }
 
@@ -228,7 +238,7 @@ async function handleTest(config: Config, request: Request): Promise<Response> {
     const outcome: PushOutcome = { ok: false, status: 0, error: '请先填写可用的 http(s) 通知接口地址' }
     return Response.json(outcome, { status: 400 })
   }
-  const outcome = await sendPush(target, testFacts(Date.now()))
+  const outcome = await sendPush(target, testFacts(Date.now(), draft.icon ?? config.endpointIcon.get()))
   return Response.json(outcome, { status: outcome.ok ? 200 : 502 })
 }
 

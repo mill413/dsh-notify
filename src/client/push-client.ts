@@ -36,6 +36,8 @@ export interface PushTestDraft {
   readonly headers: readonly EndpointHeader[]
   /** Body template as the card holds it. */
   readonly body: string
+  /** Icon URL as the card holds it; empty means "no icon". */
+  readonly icon: string
 }
 
 /** Read the node half's answer, tolerating a non-JSON body. */

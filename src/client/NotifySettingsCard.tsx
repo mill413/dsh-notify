@@ -233,6 +233,7 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
       method: draft.endpointMethod,
       headers: draft.endpointHeaders,
       body: draft.endpointBody,
+      icon: draft.endpointIcon,
     })
       .then((outcome) => {
         setPushNotice(outcome.ok ? t('push.test.ok') : `${t('push.test.failed')}${outcome.error ?? ''}`)
@@ -437,6 +438,19 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
               />
               <p className="dsn-hint">{t('push.field.body.desc')}</p>
               <p className="dsn-hint">{t('push.field.variables')}</p>
+            </div>
+
+            <div className="dsn-field">
+              <label className="dsn-toggleLabel" htmlFor="dsn-push-icon">{t('push.field.icon')}</label>
+              <input
+                id="dsn-push-icon"
+                className="dsn-input"
+                value={draft.endpointIcon}
+                disabled={disabled}
+                placeholder={t('push.field.icon.placeholder')}
+                onChange={(event) => { patch({ endpointIcon: event.target.value }) }}
+              />
+              <p className="dsn-hint">{t('push.field.icon.desc')}</p>
             </div>
 
             <div className="dsn-field">

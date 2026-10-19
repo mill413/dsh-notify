@@ -56,6 +56,8 @@ export interface PushFacts {
   readonly sessionId: string
   /** Trigger time, ISO 8601. */
   readonly time: string
+  /** Notification icon URL; empty when unset, in which case the field is dropped. */
+  readonly icon: string
 }
 
 /** Delivery outcome, reported by both the sender log and the test route. */
@@ -79,7 +81,8 @@ const TIMEOUT_MS = 5000
  * plugin was built against; a plain-text or form endpoint can replace it with
  * any text that uses the same `{{…}}` variables.
  */
-export const DEFAULT_BODY_TEMPLATE = '{"title":"{{title}}","body":"{{body}}","level":"{{level}}","group":"{{group}}"}'
+export const DEFAULT_BODY_TEMPLATE =
+  '{"title":"{{title}}","body":"{{body}}","level":"{{level}}","group":"{{group}}","icon":"{{icon}}"}'
 
 /**
  * Push copy is fixed Chinese, like this plugin's primary UI language: the host
@@ -98,7 +101,7 @@ const BODY: Record<PushKind, string> = {
 const SUBAGENT_SUFFIX = '（子代理）'
 
 /** Variables a template may use, in the order the settings card documents them. */
-export const PUSH_VARIABLES: readonly string[] = ['title', 'body', 'event', 'level', 'group', 'sessionId', 'time']
+export const PUSH_VARIABLES: readonly string[] = ['title', 'body', 'event', 'level', 'group', 'sessionId', 'time', 'icon']
 
 /**
  * Build the variables for one trigger.
@@ -107,6 +110,7 @@ export const PUSH_VARIABLES: readonly string[] = ['title', 'body', 'event', 'lev
  * @param subagent - whether the trigger came from a subagent.
  * @param sessionId - Session identity; empty for the test push.
  * @param now - timestamp in milliseconds.
+ * @param icon - configured icon URL; empty drops the field from the payload.
  * @returns the complete variable set for the body template.
  */
 export function pushFacts(
@@ -115,6 +119,7 @@ export function pushFacts(
   subagent: boolean,
   sessionId: string,
   now: number,
+  icon = '',
 ): PushFacts {
   return {
     event: kind,
@@ -125,16 +130,18 @@ export function pushFacts(
     group: PUSH_GROUP,
     sessionId,
     time: new Date(now).toISOString(),
+    icon,
   }
 }
 
 /**
  * Build the variables for the settings card's test push.
  * @param now - timestamp in milliseconds.
+ * @param icon - configured icon URL; the test push must show what a real one would.
  * @returns the test trigger's variables.
  */
-export function testFacts(now: number): PushFacts {
-  return pushFacts('test', 'DSH 测试推送', false, '', now)
+export function testFacts(now: number, icon = ''): PushFacts {
+  return pushFacts('test', 'DSH 测试推送', false, '', now, icon)
 }
 
 /** Replace every known `{{name}}` placeholder; unknown ones stay verbatim. */
