@@ -116,3 +116,12 @@ test('one save writes every field, header rows in the same atomic write', async 
   assert.deepEqual(written.get('endpointHeaders'), [{ name: 'Authorization', value: 'Bearer t' }])
   assert.equal(seen.ops?.length, Object.keys(PREFS_DEFAULTS).length)
 })
+
+// A settings draft must retain the icon placeholder before its first host read.
+test('the default draft includes a configured icon in the rendered push', async () => {
+  const { renderBody, pushFacts } = await import('../src/push.ts')
+  const draft = normalizePrefs({ endpointIcon: 'https://example.com/icon.png' })
+  const payload = JSON.parse(renderBody(draft.endpointBody,
+    pushFacts('test', 'test', false, '', 0, draft.endpointIcon)))
+  assert.equal(payload.icon, draft.endpointIcon)
+})

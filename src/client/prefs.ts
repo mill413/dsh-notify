@@ -7,12 +7,10 @@
  * same form's atomic, revision-fenced `mutate`. Defaults hold until the form
  * resolves, and the service is read optionally — no settings provider means the
  * defaults still drive the watcher.
- *
- * This mirrors `dsh-polish`'s preference handle: it replaces the removed
- * `ctx.settingsScope`, because 0.1.7 addresses a form by its profile entry id,
- * which is this plugin's own row id.
  */
 
+import { PUSH_METHODS as ENDPOINT_METHODS, DEFAULT_BODY_TEMPLATE } from '../shared/push-config.ts'
+export { DEFAULT_BODY_TEMPLATE } from '../shared/push-config.ts'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls `ctx.configForms` (the shared configuration form service).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -20,7 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SettingsPathOpView } from '@deepseek-ai/dsh-settings/types'
 
 /** Request methods the card offers; mirrors the Host half's `PUSH_METHODS`. */
-export const ENDPOINT_METHODS = ['POST', 'PUT', 'PATCH', 'GET'] as const
+export { PUSH_METHODS as ENDPOINT_METHODS } from '../shared/push-config.ts'
 
 /** One method of {@link ENDPOINT_METHODS}. */
 export type EndpointMethod = (typeof ENDPOINT_METHODS)[number]
@@ -34,13 +32,6 @@ export interface EndpointHeader {
   /** Rows travel the settings wire as plain JSON objects; the index signature says so. */
   [key: string]: string
 }
-
-/**
- * Fallback body template, mirroring the Host half's `DEFAULT_BODY_TEMPLATE`: it
- * only applies before the first form read, and the two must agree so a card
- * that renders the shipped default cannot save a different one by accident.
- */
-export const DEFAULT_BODY_TEMPLATE = '{"title":"{{title}}","body":"{{body}}","level":"{{level}}","group":"{{group}}"}'
 
 /** Notification preferences owned by the browser half. */
 export interface NotifyPrefs {
@@ -62,7 +53,7 @@ export interface NotifyPrefs {
   endpointHeaders: EndpointHeader[]
   /** Body template rendered against the trigger's variables. */
   endpointBody: string
-  /** Icon URL handed to the template as `{{icon}}`; empty means the field is dropped. */
+  /** Icon URL handed to the template as `{{icon}}`; empty substitutes an empty string. */
   endpointIcon: string
 }
 
@@ -236,7 +227,7 @@ export function samePrefs(left: NotifyPrefs, right: NotifyPrefs): boolean {
  * one: before the first read there is no previous document, so the first read
  * always adopts the persisted values — a card that started from the shipped
  * defaults must not mistake them for a user edit — and afterwards a draft is
- * preserved only while it still equals what was published last.
+ * preserved only while it differs from what was published last.
  * @param draft - the draft the card currently holds.
  * @param published - the document just published by the form.
  * @param previous - the document published before this one, or null before the first read.

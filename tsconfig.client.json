@@ -5,7 +5,7 @@
     "moduleResolution": "bundler",
     "ignoreDeprecations": "6.0",
     "jsx": "react-jsx",
-    "rootDir": "src/client",
+    "rootDir": "src",
     "outDir": ".client-build",
     "declaration": true,
     "declarationDir": "lib/types/client",

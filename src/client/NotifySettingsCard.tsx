@@ -13,10 +13,13 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { ensureCardStyle } from './settings-style.ts'
 import {
   IconChevronDownOutlineRegular,
   IconCloseOutlineRegular,
   IconPlusOutlineRegular,
+  Button,
+  Menu,
   Input,
   Switch,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -79,70 +82,12 @@ const PERMISSION_HINT: Record<NotifyPermission, NotifyKey> = {
   insecure: 'perm.hint.insecure',
 }
 
-/** Inject the once-only card chrome stylesheet. */
-function ensureCardStyle(): void {
-  if (document.getElementById('dsn-notify-card-style') !== null) return
-  const style = document.createElement('style')
-  style.id = 'dsn-notify-card-style'
-  style.textContent = `
-    .dsn-card { list-style: none; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-alias-bg-layer-3); transition: border-color .16s, background .16s; }
-    .dsn-card:hover { border-color: var(--dsw-alias-label-dimmed); }
-    .dsn-cardOpen { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-label-dimmed); }
-    .dsn-header { width: 100%; appearance: none; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; }
-    .dsn-header:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
-    .dsn-headText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-    .dsn-name { font-size: 15px; font-weight: 600; line-height: 1.4; color: var(--dsw-alias-label-primary); }
-    .dsn-description { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-tertiary); }
-    .dsn-chevron { flex: none; color: var(--dsw-alias-label-tertiary); transition: transform .16s; }
-    .dsn-chevronOpen { transform: rotate(180deg); }
-    .dsn-body { border-top: 1px solid var(--dsw-alias-border-l2); margin: 0 16px; padding-bottom: 8px; }
-    .dsn-readOnly { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-tertiary); }
-    .dsn-pending { flex: none; border-radius: 999px; padding: 1px 8px; font-size: 11px; line-height: 17px; font-weight: 500; white-space: nowrap; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); }
-    .dsn-field { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; }
-    .dsn-field + .dsn-field { border-top: 1px solid var(--dsw-alias-border-l2); }
-    .dsn-section { margin-top: 4px; font-size: 13px; font-weight: 600; line-height: 1.5; color: var(--dsw-alias-label-secondary); }
-    .dsn-input { display: flex; width: 100%; }
-    .dsn-select { appearance: none; height: 32px; padding: 0 8px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; cursor: pointer; }
-    .dsn-select:focus-visible { outline: none; border-color: var(--dsw-alias-state-business-primary); }
-    .dsn-select:disabled { opacity: .5; cursor: default; }
-    .dsn-textarea { width: 100%; min-height: 72px; padding: 6px 8px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; resize: vertical; }
-    .dsn-textarea::placeholder { color: var(--dsw-alias-label-dimmed); }
-    .dsn-textarea:focus-visible { outline: none; border-color: var(--dsw-alias-state-business-primary); }
-    .dsn-textarea:disabled { opacity: .5; cursor: default; }
-    .dsn-headerRow { display: flex; align-items: center; gap: 8px; }
-    .dsn-headerName { flex: 0 1 42%; }
-    .dsn-headerValue { flex: 1 1 58%; }
-    .dsn-iconButton { appearance: none; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--dsw-alias-label-tertiary); cursor: pointer; }
-    .dsn-iconButton:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
-    .dsn-iconButton:disabled { opacity: .5; cursor: default; }
-    .dsn-iconButton:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
-    .dsn-toggleRow { display: flex; align-items: center; gap: 12px; }
-    .dsn-toggleLabel { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; line-height: 1.5; color: var(--dsw-alias-label-primary); }
-    .dsn-hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-tertiary); }
-    .dsn-statusRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .dsn-statusLabel { font-size: 13px; font-weight: 500; line-height: 1.5; color: var(--dsw-alias-label-primary); }
-    .dsn-badge { flex: none; border-radius: 999px; padding: 1px 8px; font-size: 11px; line-height: 17px; font-weight: 500; white-space: nowrap; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); }
-    .dsn-badgeOk { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-brand-primary); }
-    .dsn-badgeBad { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-error); }
-    .dsn-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-    .dsn-button { appearance: none; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 5px 12px; font: inherit; font-size: 13px; line-height: 1.5; cursor: pointer; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
-    .dsn-button:hover:not(:disabled) { border-color: var(--dsw-alias-label-dimmed); }
-    .dsn-button:disabled { opacity: .5; cursor: default; }
-    .dsn-button:focus-visible, .dsn-save:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
-    .dsn-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 0 4px; border-top: 1px solid var(--dsw-alias-border-l2); }
-    .dsn-failed { flex: 1; min-width: 0; margin: 0; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-error); }
-    .dsn-save { appearance: none; border: 1px solid transparent; border-radius: 8px; padding: 5px 14px; font: inherit; font-size: 13px; line-height: 1.5; cursor: pointer; background: var(--dsw-alias-label-primary); color: var(--dsw-alias-bg-layer-3); }
-    .dsn-save:disabled { opacity: .4; cursor: default; }
-    @media (prefers-reduced-motion: reduce) { .dsn-card, .dsn-chevron { transition: none; } }
-  `
-  document.head.appendChild(style)
-}
-
 /** Render the dsh-notify settings card. */
 export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): React.ReactElement | null {
   const { prefs, t, triggers, environment, requestPermission, showTest, testPush } = props
   const persistedRef = useRef<NotifyPrefs | null>(null)
   const [open, setOpen] = useState(false)
+  const [methodOpen, setMethodOpen] = useState(false)
   const [persisted, setPersisted] = useState<NotifyPrefs | null>(null)
   const [draft, setDraft] = useState<NotifyPrefs>(PREFS_DEFAULTS)
   const [writable, setWritable] = useState(false)
@@ -265,12 +210,12 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
 
   return (
     <li className={open ? 'dsn-card dsn-cardOpen' : 'dsn-card'}>
-      <button
+      <Button
         type="button"
         className="dsn-header"
         aria-expanded={open}
         aria-label={`${t(open ? 'card.collapse' : 'card.expand')}: ${t('card.title')}`}
-        onClick={() => { setOpen(!open) }}
+        onClick={() => { setMethodOpen(false); setOpen(!open) }}
       >
         <span className="dsn-headText">
           <span className="dsn-name">{t('card.title')}</span>
@@ -278,7 +223,7 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
         </span>
         {dirty ? <span className="dsn-pending">{t('card.unsaved')}</span> : null}
         <IconChevronDownOutlineRegular className={open ? 'dsn-chevron dsn-chevronOpen' : 'dsn-chevron'} />
-      </button>
+      </Button>
       {open
         ? (
           <div className="dsn-body">
@@ -294,21 +239,21 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
               <div className="dsn-actions">
                 {env?.supported === true && permission === 'default'
                   ? (
-                    <button type="button" className="dsn-button" onClick={ask}>
+                    <Button type="button" variant="outline" size="sm" onClick={ask}>
                       {t('action.request')}
-                    </button>
+                    </Button>
                   )
                   : null}
                 {env?.supported === true
                   ? (
-                    <button type="button" className="dsn-button" disabled={permission !== 'granted'} onClick={test}>
+                    <Button type="button" variant="outline" size="sm" disabled={permission !== 'granted'} onClick={test}>
                       {t('action.test')}
-                    </button>
+                    </Button>
                   )
                   : (
-                    <button type="button" className="dsn-button" onClick={() => { setEnv(environment?.() ?? null); setNotice(null) }}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => { setEnv(environment?.() ?? null); setNotice(null) }}>
                       {t('action.refresh')}
-                    </button>
+                    </Button>
                   )}
               </div>
               <p className="dsn-hint">{t('trigger.label')}：{describeTrigger(trigger, t)}</p>
@@ -362,18 +307,36 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
 
             <div className="dsn-field">
               <label className="dsn-toggleLabel" htmlFor="dsn-push-method">{t('push.field.method')}</label>
-              <select
-                id="dsn-push-method"
-                className="dsn-select"
-                value={draft.endpointMethod}
-                disabled={disabled}
-                onChange={(event) => {
-                  const method = ENDPOINT_METHODS.find(candidate => candidate === event.target.value)
+              <Menu
+                open={methodOpen && !disabled}
+                portal
+                autoFocus
+                selectedId={draft.endpointMethod}
+                items={ENDPOINT_METHODS.map(method => ({ id: method, label: method }))}
+                onSelect={(id) => {
+                  const method = ENDPOINT_METHODS.find(candidate => candidate === id)
                   if (method !== undefined) patch({ endpointMethod: method })
+                  setMethodOpen(false)
                 }}
-              >
-                {ENDPOINT_METHODS.map(method => <option key={method} value={method}>{method}</option>)}
-              </select>
+                onClose={() => { setMethodOpen(false) }}
+                anchor={(
+                  <Button
+                    id="dsn-push-method"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="dsn-method"
+                    disabled={disabled}
+                    aria-label={t('push.field.method')}
+                    aria-haspopup="menu"
+                    aria-expanded={methodOpen && !disabled}
+                    onClick={() => { setMethodOpen(!methodOpen) }}
+                  >
+                    {draft.endpointMethod}
+                    <IconChevronDownOutlineRegular />
+                  </Button>
+                )}
+              />
               <p className="dsn-hint">{t('push.field.method.desc')}</p>
             </div>
 
@@ -399,9 +362,9 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
                     aria-label={`${t('push.field.headers.value')} ${index + 1}`}
                     onChange={(event) => { setHeader(index, { value: event.target.value }) }}
                   />
-                  <button
+                  <Button
                     type="button"
-                    className="dsn-iconButton"
+                    variant="ghost" size="sm"
                     disabled={disabled}
                     aria-label={`${t('push.field.headers.remove')} ${index + 1}`}
                     onClick={() => {
@@ -409,19 +372,19 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
                     }}
                   >
                     <IconCloseOutlineRegular />
-                  </button>
+                  </Button>
                 </div>
               ))}
               <div className="dsn-actions">
-                <button
+                <Button
                   type="button"
-                  className="dsn-button"
+                  variant="outline" size="sm"
                   disabled={disabled}
                   onClick={() => { patch({ endpointHeaders: [...draft.endpointHeaders, { name: '', value: '' }] }) }}
                 >
                   <IconPlusOutlineRegular />
                   {t('push.field.headers.add')}
-                </button>
+                </Button>
               </div>
               <p className="dsn-hint">{t('push.field.headers.desc')}</p>
             </div>
@@ -442,7 +405,7 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
 
             <div className="dsn-field">
               <label className="dsn-toggleLabel" htmlFor="dsn-push-icon">{t('push.field.icon')}</label>
-              <input
+              <Input
                 id="dsn-push-icon"
                 className="dsn-input"
                 value={draft.endpointIcon}
@@ -455,18 +418,18 @@ export function NotifySettingsCard(props: Partial<NotifySettingsCardInjected>): 
 
             <div className="dsn-field">
               <div className="dsn-actions">
-                <button type="button" className="dsn-button" disabled={testing} onClick={runTest}>
+                <Button type="button" variant="outline" size="sm" disabled={testing} onClick={runTest}>
                   {t(testing ? 'push.test.sending' : 'push.test')}
-                </button>
+                </Button>
               </div>
               {pushNotice !== null ? <p className="dsn-hint" role="status">{pushNotice}</p> : null}
             </div>
 
             <div className="dsn-footer">
               {failed ? <p className="dsn-failed" role="status">{t('card.failed')}</p> : null}
-              <button type="button" className="dsn-save" disabled={!dirty || disabled} onClick={save}>
+              <Button type="button" variant="primary" size="sm" disabled={!dirty || disabled} onClick={save}>
                 {t(saving ? 'card.saving' : 'card.save')}
-              </button>
+              </Button>
             </div>
           </div>
         )

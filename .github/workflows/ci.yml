@@ -1,0 +1,31 @@
+name: Verify plugin
+
+on:
+  pull_request:
+  push:
+    branches: [main, master, dev, release, 'chore/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['22', '24']
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify
+      - run: pnpm test
+      - run: pnpm run build
+      - run: pnpm run check:package

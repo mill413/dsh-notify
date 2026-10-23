@@ -14,34 +14,33 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # Legacy Gitea publishing; set a runner-reachable URL in repository variables.
       - name: Resolve Gitea base URL
+        env:
+          GITEA_BASE_URL: ${{ vars.GITEA_BASE_URL }}
         run: |
           set -eu
-          for h in 172.17.0.1 host.docker.internal 192.168.31.76 127.0.0.1; do
-            if curl -fsS -m 3 "http://$h:3000/api/v1/version" >/dev/null 2>&1; then
-              echo "GITEA_HOST=$h" >> "$GITHUB_ENV"
-              echo "GITEA_BASE=http://$h:3000" >> "$GITHUB_ENV"
-              echo "using $h:3000"
-              exit 0
-            fi
-          done
-          echo "cannot reach the Gitea instance from the job container" >&2
-          exit 1
+          : "${GITEA_BASE_URL:?Set the GITEA_BASE_URL repository variable}"
+          curl -fsS -m 5 "$GITEA_BASE_URL/api/v1/version" >/dev/null
+          echo "GITEA_BASE=${GITEA_BASE_URL%/}" >> "$GITHUB_ENV"
 
       - name: Checkout
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
-          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
-            "http://oauth2:${GITHUB_TOKEN}@${GITEA_HOST}:3000/${GITHUB_REPOSITORY}.git" .
+          AUTH=$(printf 'oauth2:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader \
+            GIT_CONFIG_VALUE_0="Authorization: Basic $AUTH" \
+            git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+            "${GITEA_BASE}/${GITHUB_REPOSITORY}.git" .
           git log -1 --format='%h %s'
 
       - name: Toolchain
         run: |
           set -eu
           node -v
-          npm i -g pnpm@11 >/dev/null
+          npm i -g pnpm@12.15.0 >/dev/null
           pnpm -v
 
       - name: Install dependencies
@@ -71,7 +70,7 @@ jobs:
             echo "tag $TAG does not match package version v$VERSION" >&2
             exit 1
           fi
-          npm pack
-          TGZ=$(ls -1 ./*.tgz | head -1)
+          npm pack --json > /tmp/dsh-notify-pack.json
+          TGZ=$(node --input-type=module -e 'import fs from "node:fs"; const result = JSON.parse(fs.readFileSync("/tmp/dsh-notify-pack.json", "utf8")); console.log((Array.isArray(result) ? result : Object.values(result))[0].filename)')
           ls -l "$TGZ"
           TGZ="$TGZ" node .gitea/release.mjs

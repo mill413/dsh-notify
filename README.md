@@ -1,89 +1,137 @@
 # @mill413/dsh-notify
 
-DSH Web 通知插件（`platform: web`，node 半承载设置与自定义通知接口）。
+为 DeepSeek Harness（DSH）Web 提供桌面通知和自定义 HTTP 推送。在任务结束或需要你处理时提醒你，并支持从桌面通知返回对应会话。
 
-离开电脑去干别的事时，DSH 的 Agent 什么时候跑完、什么时候卡在等你审批，都只能在浏览器里看到。本插件把这两类事件同时接到两个出口：浏览器原生的系统通知（任务完成弹一条，等待你处理弹一条，点通知直接跳回对应会话），以及你自定义的 HTTP 接口（URL、方法、请求头、请求体都自己填，例如 relay 的通知服务，由它推送到手机）。
+本项目是独立插件，使用 MIT 许可证。当前插件版本为 `0.4.1`，目标宿主为 npm 发布的 `@deepseek-ai/dsh@0.2.1-rc.3`。其他宿主版本尚未验证。
 
 ## 功能
 
-- **任务完成通知**：主 Agent 的 `running` 从 `true` 变 `false` 时发送系统通知，标题是该会话的名字。子会话（subagent）自己结束不单独通知——它所属的那一轮结束时父会话会报一次，避免同一轮任务弹两条。
-- **等待处理通知**：Agent 需要你审批操作、回答问题或确认方案时发送通知（含子代理发起的请求，否则整轮会卡住而无人知晓）。已存在的请求不会重复提醒，换成新的请求（key 变化）会再提醒一次。
-- **仅在前台之外提醒**（默认开）：页面可见且有焦点时不打扰，切标签页、最小化或窗口失焦时才弹。
-- **推送到自定义接口**（默认关，填好 URL 再开）：把上面两条触发命中的通知同时发给你配置的 HTTP 接口。请求在 node 半发出，因此浏览器关掉、电脑休眠也照发。
-- **设置卡片**：在 **设置 → 插件 → dsh-notify** 里有「桌面通知」卡片：总开关、两个触发开关、免打扰开关、浏览器授权状态与请求按钮、测试通知按钮，以及自定义接口的地址、方法、请求头、请求体模板与「测试推送」按钮。
+| 通道 | 触发条件 | 运行条件 |
+| --- | --- | --- |
+| 浏览器桌面通知 | 主会话停止运行；出现新的待审批、待回答或计划审阅请求 | DSH 页面保持打开，浏览器允许通知 |
+| 自定义 HTTP 推送 | 主 Agent 从 running 转为 idle；Agent 发起审批或提问 | DSH 宿主进程保持运行，可关闭浏览器 |
 
-## 数据来源
+- 子代理结束时不单独发送完成通知；子代理等待审批或回答时会提醒。
+- 桌面通知默认只在页面隐藏或失去焦点时发送；这个限制不影响 HTTP 推送。
+- 首次状态快照只建立基线，不补发页面关闭期间的旧通知。
+- 设置页提供通知权限检查、测试通知、测试推送和最近一次桌面通知触发结果。
+- 设置界面支持中文和英文。HTTP 推送的默认标题与正文使用中文，可通过请求体模板自定义正文。
 
-浏览器半只订阅 `ctx.uiSession.sessionStatus`——宿主已经为每个会话维护了运行状态和「当前最高优先级的待交互请求」，所以插件不需要 retain 任何会话、不订阅事件流、也不做 DOM 抓取。状态快照的差分规则在 `src/client/notify-core.ts`，与 DOM 无关，由 `tests/notify-core.test.ts` 直接覆盖。
-
-首次快照只建立基线，因此刷新页面不会把关闭期间已经完成的任务重新提醒一遍。
-
-## 自定义通知接口
-
-第二条出口走 node 半：它订阅宿主的 `agent/status`（完成）与 `approval/request` / `user-questions/request`（等待处理），然后按你配置的 URL、方法、请求头、请求体发一次请求。
-
-| 配置 | 说明 |
-| --- | --- |
-| 接口地址 | 完整的 http(s) 地址，含路径（例如通知服务的 `http://127.0.0.1:20710/api/send`）。留空或不是 http(s) 时整条通道不发。 |
-| 请求方法 | `POST` / `PUT` / `PATCH` / `GET`。`GET` 不携带请求体。 |
-| 请求头 | 逐条原样发送，名称为空的行不发。带请求体且没自定义内容类型时自动补 `application/json`。 |
-| 请求体模板 | 支持变量替换；能解析成 JSON 的模板按 JSON 转义后发送，其他按纯文本替换。 |
-
-模板变量：
-
-| 变量 | 值 |
-| --- | --- |
-| `{{title}}` | 会话名（测试推送时是「DSH 测试推送」） |
-| `{{body}}` | 默认文案：`任务已完成` / `等待你的审批` / `等待你的回答`，子代理加「（子代理）」 |
-| `{{event}}` | `complete` / `approval` / `question` / `test` |
-| `{{level}}` | `default`（完成、测试）或 `high`（等待处理） |
-| `{{group}}` | 固定 `dsh`，便于接收端过滤 |
-| `{{sessionId}}` | 会话 ID |
-| `{{time}}` | 触发时间（ISO 8601） |
-
-未知变量保持原样（写错不会把请求体截断成空）。
-
-- 默认模板 `{"title":"{{title}}","body":"{{body}}","level":"{{level}}","group":"{{group}}"}` 直接对准 relay 通知服务的 `/api/send`：地址填 `http://127.0.0.1:20710/api/send`，再加一行请求头 `Authorization: Bearer notify_…`。该服务的发送令牌在它界面的「发送令牌」页创建，令牌名会记为来源。
-- **请求头里的凭据以明文存在 profile 的 `cordis.patch.yml`（0600）**——这是 settings 存插件配置的既定位置，卡片上随时能改。
-- 两个触发条件沿用卡片上原有的开关；「仅在前台之外提醒」只约束浏览器通知，不影响这条通道（发送端不在页面里）。
-- 默认正文是固定的中文（node 半没有 locale 通道，浏览器的语言偏好只投影给客户端）；想要别的措辞就改模板。
-- 投递历史在通知服务的 `/notify` 界面里看，插件不重复记录。
-
-## 浏览器限制
-
-系统通知属于安全上下文能力：
-
-- `http://127.0.0.1:3081`（localhost）可以正常授权；
-- Launcher 的局域网明文地址（`http://<lan-ip>:3080`）**不能**授权，卡片会显示「非安全上下文」并给出提示；
-- Chrome on Android 只接受 ServiceWorker 通知，构造 `Notification` 会失败，插件会返回「发送失败」而不是抛错。
-
-权限由浏览器持有，随时可能在站点设置里被改成「拒绝」。卡片每次窗口重新获得焦点都会重读一次权限状态。
-
-Windows 桌面端自动通知使用固定 16 字符的会话摘要 tag，保留按会话替换通知的行为。
-Electron 会把页面来源加到 Web Notification 的 tag 前；直接拼接完整 Session ID 会超过
-[Windows 的 64 字符限制](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotification.tag)，
-造成「测试按钮能弹，任务完成和等待处理通知却静默丢失」。
-完成、审批和回答通知都使用短 tag；它只影响通知标识，不改变通知标题、内容或点击跳转。
-
-## 开发
-
-```sh
-pnpm install --frozen-lockfile
-pnpm run verify   # 两个 tsconfig 的类型检查
-pnpm test         # notify-core 的差分规则、接口模板与请求构造、prefs 取值规则
-pnpm run build    # tsc 出 node 半 + esbuild 出 lib/client.js
-```
-
-依赖全部来自 npm，固定为经验证的宿主版本 `0.2.1-alpha.2`；不引用 harness checkout。
+“任务完成”根据运行状态变化判断，不表示任务一定成功。HTTP 通道目前没有独立的计划审阅事件订阅。
 
 ## 安装
 
+当前仓库尚未配置 GitHub → npm 自动发布。可先从源码独立构建并安装打包产物，不需要下载或构建 DSH 源码。
+
 ```sh
+pnpm install --frozen-lockfile
+pnpm run verify
+pnpm test
+pnpm run build
 npm pack
-"$DSH_LAUNCHER_DSH_COMMAND" plugin --profile web add /absolute/path/to/mill413-dsh-notify-0.3.0.tgz
-systemctl --user restart dsh-web.service
 ```
 
-## 打包内容
+使用目标正式 runtime 的 `dsh plugin add` 安装生成的 tarball。若通过 Launcher 运行 DSH，先从其实际配置确认 `DSH_LAUNCHER_DSH_COMMAND`，并使用相同的 `DSH_HOME` 与 profile：
 
-`files` 只包含 `lib`、`src`、`cordis.patch.yml`、`README.md`、`LICENSE`。宿主提供的共享包（Cordis、DSH SDK、React、UI primitives）声明在 `peerDependencies`，不打进插件 bundle。
+```sh
+"$DSH_LAUNCHER_DSH_COMMAND" plugin --profile web add /absolute/path/to/mill413-dsh-notify-0.4.1.tgz
+```
+
+插件自带 `cordis.patch.yml`，由 CLI 加入 profile；无需手动编辑宿主配置。安装完成后按你的部署方式重新加载 DSH。若部署使用 `dsh-web.service` systemd 用户服务，在产物和配置确认可用后执行一次 `systemctl --user restart dsh-web.service`，再检查服务状态。
+
+## 使用
+
+1. 打开 **插件 → 桌面通知（dsh-notify）**，展开设置卡片。
+2. 点击浏览器通知授权按钮，再使用测试通知确认效果。
+3. 按需调整任务完成、等待处理和仅后台提醒开关，点击保存。
+4. 如需手机或其他渠道提醒，填写 HTTP 接口配置，先测试推送，再启用并保存。
+
+浏览器通知总开关与 HTTP 推送开关独立；任务完成、等待处理两个触发开关由两种通道共用。测试推送使用当前表单草稿，不需要先保存，也不受推送开关限制。
+
+## HTTP 推送
+
+请求由 DSH 宿主发送。接口地址中的 `localhost` 指向宿主所在机器。关闭浏览器不会停止 HTTP 推送，但宿主关机、休眠或停止后无法继续发送。
+
+| 配置 | 说明 |
+| --- | --- |
+| 接口地址 | 完整的 HTTP 或 HTTPS URL；不支持 URL 内嵌用户名、密码 |
+| 请求方法 | `POST`、`PUT`、`PATCH` 或 `GET`；GET 不携带请求体 |
+| 请求头 | 自定义鉴权和内容类型等；名称为空的行忽略 |
+| 请求体模板 | 合法 JSON 会在解析后替换字符串中的变量，再序列化；其他内容按普通文本替换 |
+| 图标地址 | 提供给 `{{icon}}` 的 URL，需能被接收端访问；插件不上传图标 |
+
+默认请求体：
+
+```json
+{"title":"{{title}}","body":"{{body}}","level":"{{level}}","group":"{{group}}","icon":"{{icon}}"}
+```
+
+| 变量 | 值 |
+| --- | --- |
+| `{{title}}` | 会话标题；测试时为固定测试标题 |
+| `{{body}}` | 任务完成、等待审批或等待回答的提示；子代理有额外标记 |
+| `{{event}}` | `complete`、`approval`、`question` 或 `test` |
+| `{{level}}` | 完成、测试为 `default`；审批、提问为 `high` |
+| `{{group}}` | 固定为 `dsh` |
+| `{{sessionId}}` | 会话 ID；测试时为空 |
+| `{{time}}` | ISO 8601 时间 |
+| `{{icon}}` | 配置的图标地址；未配置时为空字符串，JSON 字段仍保留 |
+
+未知变量保持原样。变量只替换请求体中的值，不替换 URL、请求头或 JSON 键。普通文本模式不进行 URL 编码；对接表单接口时需自行确定编码方式。
+
+有请求体且未指定 `Content-Type` 时，默认使用 `application/json`。纯文本或表单接口应显式设置相应请求头。单次请求超时为 5 秒，没有重试或离线队列；HTTP 2xx 视为成功，接收服务是否最终送达由接收服务负责。
+
+例如，可以设置接口为 `https://notify.example.com/api/send`，请求头为 `Authorization: Bearer <YOUR_TOKEN>`，再按接收服务要求修改请求体。
+
+## 隐私与权限
+
+- 插件没有内置第三方接收地址；HTTP 推送默认关闭，只向你配置的地址发送。
+- 默认模板发送会话标题、事件提示、级别、分组和图标地址；模板也可包含会话 ID 和时间。插件不主动发送对话正文。
+- 接口凭据随插件设置保存在 DSH profile 中，不由本插件加密。不要将运行时 profile、真实请求头或带凭据的截图提交到仓库。
+- 测试接口通过宿主 Connection API 注册，依赖宿主鉴权。能访问该功能的用户可要求宿主向指定 HTTP 地址发送请求，包括宿主可访问的内网服务；请遵循宿主的访问权限边界。
+- 接口返回的错误消息可能出现在设置页或宿主日志中。
+
+## 浏览器限制与排查
+
+| 现象 | 检查项 |
+| --- | --- |
+| 无法请求通知权限 | 使用 HTTPS 或浏览器认可的本机安全上下文；普通局域网 HTTP 地址通常不满足要求 |
+| 已授权但没有弹窗 | 检查系统勿扰模式、浏览器站点权限、总开关和“仅在前台之外提醒” |
+| 手机浏览器不能发桌面通知 | 本插件使用 `Notification` 构造器，没有 Service Worker 推送实现；部分移动浏览器不支持 |
+| 关闭页面后没有桌面通知 | 桌面通道要求页面保持打开；需要离线于浏览器的提醒时使用 HTTP 通道 |
+| HTTP 推送失败 | 从宿主侧检查网络、接口地址、请求头及接收服务日志，使用设置页测试推送 |
+
+Windows 桌面端使用固定 16 字符的会话摘要 tag，避免完整会话 ID 导致通知标识过长；完成和交互通知分别保留同会话替换行为。
+
+## 开发
+
+Node.js **22.18.0 或更新版本**；包管理器固定为 **pnpm 12.15.0**（见 `packageManager`）。测试直接运行 TypeScript，要求 Node 支持类型擦除。建议在与目标 DSH 相同的 Node 主版本上验证。
+
+```sh
+pnpm install --frozen-lockfile
+pnpm run verify       # 宿主和浏览器代码类型检查
+pnpm test             # 通知状态差分、偏好设置、模板与 HTTP 请求测试
+pnpm run build        # 宿主 JS、声明文件和浏览器 bundle
+pnpm run check:package # 构建后校验实际打包产物
+```
+
+```text
+src/index.ts                  宿主事件订阅、配置与测试接口
+src/push.ts                   HTTP 地址校验、模板渲染和投递
+src/client/                   桌面通知、设置卡片及浏览器状态
+src/shared/                   前后端共享的请求方法和默认模板
+locale/                       插件元数据翻译
+scripts/build-client.mjs      浏览器模块打包
+tests/                       单元测试
+cordis.patch.yml              插件 bundle 声明
+```
+
+SDK 开发依赖来自 npm，固定到目标版本；宿主共享包通过 peer dependencies 声明，浏览器服务通过 `dsh.client.inject` 加载。仓库不引用相邻 harness checkout。发布文件使用 `package.json` 中的 `files` 白名单，包含运行产物、源码、语言文件、插件声明、图标、README 和许可证。
+
+提交前应在仅包含本插件的临时目录中冻结安装，再运行类型检查、测试、构建和打包检查。界面变更还需在 DSH 中实际检查浅色／深色主题、键盘操作、保存和控制台错误。
+
+`.gitea/` 保留旧 Gitea 发布流程；使用时需设置 runner 可访问的仓库变量 `GITEA_BASE_URL`，以及用于检出和上传 Release 的 `GITHUB_TOKEN` secret。它上传 Gitea Release 附件，不发布 npm。GitHub Actions 已配置独立安装、测试、构建和打包检查（Node 22／24）；npm 自动发布将单独配置。
+
+## 许可证
+
+[MIT](LICENSE) © 2026 mill413。
