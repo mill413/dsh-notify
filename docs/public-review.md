@@ -1,12 +1,12 @@
 # 公开仓库准备审查
 
-审查日期：2026-10-23。整合分支：`chore/github-readiness-0.4.1`。
+审查日期：2026-10-23。整理改动已合入 `dev`；仓库只保留 `dev` 和 `release`。
 
 ## 结论
 
 当前代码适合推送为公开源码仓库。已整合 `chore/public-readiness` 与 `0.4.1` 的 Windows 通知修复，前次发现的代码、默认模板和界面规范问题已处理。此结论基于以下检查，不等同于完整安全审计。
 
-GitHub 验证 CI 已配置；npm 自动发布尚未启用。正式发布前应选择新的插件版本并配置 npm Trusted Publisher。现有 `v0.4.1` tag 保持原有发布内容。
+GitHub 验证与 tag 发布 workflow 已配置；首次发布准备为 `0.4.2`。npm 账号操作和 Trusted Publisher 配置见 [发布说明](publishing.md)。现有 `v0.4.1` tag 保持原有发布内容。
 
 ## 整理内容
 

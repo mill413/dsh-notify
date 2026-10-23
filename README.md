@@ -2,7 +2,7 @@
 
 为 DeepSeek Harness（DSH）Web 提供桌面通知和自定义 HTTP 推送。在任务结束或需要你处理时提醒你，并支持从桌面通知返回对应会话。
 
-本项目是独立插件，使用 MIT 许可证。当前插件版本为 `0.4.1`，目标宿主为 npm 发布的 `@deepseek-ai/dsh@0.2.1-rc.3`。其他宿主版本尚未验证。
+本项目是独立插件，使用 MIT 许可证。当前插件版本为 `0.4.2`，目标宿主为 npm 发布的 `@deepseek-ai/dsh@0.2.1-rc.3`。其他宿主版本尚未验证。
 
 ## 功能
 
@@ -21,7 +21,7 @@
 
 ## 安装
 
-当前仓库尚未配置 GitHub → npm 自动发布。可先从源码独立构建并安装打包产物，不需要下载或构建 DSH 源码。
+GitHub Actions 已配置构建与 npm 自动发布；首次 npm 发布和 Trusted Publisher 设置见 [发布说明](docs/publishing.md)。也可以从源码独立构建并安装打包产物，不需要下载或构建 DSH 源码。
 
 ```sh
 pnpm install --frozen-lockfile
@@ -34,7 +34,7 @@ npm pack
 使用目标正式 runtime 的 `dsh plugin add` 安装生成的 tarball。若通过 Launcher 运行 DSH，先从其实际配置确认 `DSH_LAUNCHER_DSH_COMMAND`，并使用相同的 `DSH_HOME` 与 profile：
 
 ```sh
-"$DSH_LAUNCHER_DSH_COMMAND" plugin --profile web add /absolute/path/to/mill413-dsh-notify-0.4.1.tgz
+"$DSH_LAUNCHER_DSH_COMMAND" plugin --profile web add /absolute/path/to/mill413-dsh-notify-0.4.2.tgz
 ```
 
 插件自带 `cordis.patch.yml`，由 CLI 加入 profile；无需手动编辑宿主配置。安装完成后按你的部署方式重新加载 DSH。若部署使用 `dsh-web.service` systemd 用户服务，在产物和配置确认可用后执行一次 `systemctl --user restart dsh-web.service`，再检查服务状态。
@@ -110,6 +110,7 @@ Node.js **22.18.0 或更新版本**；包管理器固定为 **pnpm 12.15.0**（�
 ```sh
 pnpm install --frozen-lockfile
 pnpm run verify       # 宿主和浏览器代码类型检查
+pnpm run test:release # 发布约束与产物完整性测试
 pnpm test             # 通知状态差分、偏好设置、模板与 HTTP 请求测试
 pnpm run build        # 宿主 JS、声明文件和浏览器 bundle
 pnpm run check:package # 构建后校验实际打包产物
@@ -130,7 +131,7 @@ SDK 开发依赖来自 npm，固定到目标版本；宿主共享包通过 peer 
 
 提交前应在仅包含本插件的临时目录中冻结安装，再运行类型检查、测试、构建和打包检查。界面变更还需在 DSH 中实际检查浅色／深色主题、键盘操作、保存和控制台错误。
 
-`.gitea/` 保留旧 Gitea 发布流程；使用时需设置 runner 可访问的仓库变量 `GITEA_BASE_URL`，以及用于检出和上传 Release 的 `GITHUB_TOKEN` secret。它上传 Gitea Release 附件，不发布 npm。GitHub Actions 已配置独立安装、测试、构建和打包检查（Node 22／24）；npm 自动发布将单独配置。
+`.gitea/` 保留旧 Gitea 发布流程；使用时需设置 runner 可访问的仓库变量 `GITEA_BASE_URL`，以及用于检出和上传 Release 的 `GITHUB_TOKEN` secret。它上传 Gitea Release 附件，不发布 npm。GitHub Actions 在 `dev`／`release` 上执行验证（Node 22／24），版本 tag 触发 npm 发布，详见 [发布说明](docs/publishing.md)。
 
 ## 许可证
 
