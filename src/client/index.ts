@@ -30,7 +30,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { NotifySettingsCard, type NotifySettingsCardInjected } from './NotifySettingsCard.tsx'
-import { planNotifications, type NotifyEvent } from './notify-core.ts'
+import { notificationTag, planNotifications, type NotifyEvent } from './notify-core.ts'
 import {
   isPageBackground,
   notifyEnvironment,
@@ -132,13 +132,13 @@ function installWatcher(
       ? showSystemNotification({
         title: event.title,
         body: t('notify.complete.body'),
-        tag: `dsh-notify-complete-${event.sessionId}`,
+        tag: notificationTag('complete', event.sessionId),
         onClick,
       })
       : showSystemNotification({
         title: event.title,
         body: t(interactionKey(event.kind)) + (event.subagent ? t('notify.interaction.subagent') : ''),
-        tag: `dsh-notify-interaction-${event.sessionId}`,
+        tag: notificationTag('interaction', event.sessionId),
         onClick,
       })
     remember(sent ? 'sent' : 'unsupported')

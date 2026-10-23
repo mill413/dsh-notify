@@ -30,6 +30,21 @@ export interface NotifyGates {
   readonly notifyOnInteraction: boolean
 }
 
+/**
+ * Stable 16-character replacement key. Electron prefixes web notification tags
+ * with the origin before handing them to Windows (64 characters maximum).
+ * Full DSH session IDs exceed that limit; retain per-session deduplication with
+ * a 64-bit FNV-1a digest encoded as 13 base-36 digits plus an event prefix.
+ * This digest is an identifier, not a security primitive.
+ */
+export function notificationTag(kind: 'complete' | 'interaction', sessionId: string): string {
+  let hash = 14695981039346656037n
+  for (let i = 0; i < sessionId.length; i++) {
+    hash = BigInt.asUintN(64, (hash ^ BigInt(sessionId.charCodeAt(i))) * 1099511628211n)
+  }
+  return (kind === 'complete' ? 'dsc' : 'dsi') + hash.toString(36).padStart(13, '0')
+}
+
 /** One notification the status diff asks for, keyed by the caller's Session identity. */
 export type NotifyEvent<K extends string> =
   | {

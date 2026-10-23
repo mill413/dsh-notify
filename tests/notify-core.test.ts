@@ -3,7 +3,7 @@
 // from DSH on purpose.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { planNotifications, type NotifyGates, type SessionRowLike, type SessionStatusLike } from '../src/client/notify-core.ts'
+import { notificationTag, planNotifications, type NotifyGates, type SessionRowLike, type SessionStatusLike } from '../src/client/notify-core.ts'
 
 const GATES: NotifyGates = { notifyOnComplete: true, notifyOnInteraction: true }
 const MAIN: SessionRowLike = { title: 'Main task', subagent: false }
@@ -16,6 +16,28 @@ function statuses(...entries: Array<[string, SessionStatusLike]>): Map<string, S
 
 /** A row lookup that always answers with the same catalog facts. */
 const row = (info: SessionRowLike) => () => info
+
+test('notification tags fit Windows after Electron adds the desktop origin', () => {
+  const id = 'session-35c6de18-8f3c-401f-9073-a1850e4aa42e'
+  const prefix = 'n#dsh-app://app#'
+  assert.equal((prefix + `dsh-notify-complete-${id}`).length, 80)
+  assert.equal((prefix + `dsh-notify-interaction-${id}`).length, 83)
+  for (const kind of ['complete', 'interaction'] as const) {
+    const tag = notificationTag(kind, id)
+    assert.equal(tag.length, 16)
+    assert.match(tag, /^ds[ci][0-9a-z]{13}$/)
+    assert.ok((prefix + tag).length <= 64)
+  }
+})
+
+test('replacement tags are stable and distinguish event kinds and session suffixes', () => {
+  const first = 'session-35c6de18-8f3c-401f-9073-a1850e4aa42e'
+  const second = 'session-35c6de18-8f3c-401f-9073-a1850e4aa42f'
+  assert.equal(notificationTag('complete', first), notificationTag('complete', first))
+  assert.notEqual(notificationTag('complete', first), notificationTag('complete', second))
+  assert.notEqual(notificationTag('complete', first), notificationTag('interaction', first))
+  assert.equal(notificationTag('complete', '长会话'.repeat(1000)).length, 16)
+})
 
 test('true -> false running transition on a main session notifies completion', () => {
   const events = planNotifications(

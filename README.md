@@ -59,6 +59,12 @@ DSH Web 通知插件（`platform: web`，node 半承载设置与自定义通知�
 
 权限由浏览器持有，随时可能在站点设置里被改成「拒绝」。卡片每次窗口重新获得焦点都会重读一次权限状态。
 
+Windows 桌面端自动通知使用固定 16 字符的会话摘要 tag，保留按会话替换通知的行为。
+Electron 会把页面来源加到 Web Notification 的 tag 前；直接拼接完整 Session ID 会超过
+[Windows 的 64 字符限制](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotification.tag)，
+造成「测试按钮能弹，任务完成和等待处理通知却静默丢失」。
+完成、审批和回答通知都使用短 tag；它只影响通知标识，不改变通知标题、内容或点击跳转。
+
 ## 开发
 
 ```sh
