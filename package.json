@@ -1,6 +1,6 @@
 {
   "name": "@mill413/dsh-notify",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "任务完成或等待你处理时发送浏览器通知，也可推送到自建 HTTP 接口。",
   "type": "module",
   "main": "lib/index.js",
