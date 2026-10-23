@@ -24,7 +24,7 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-settings'
 // Type-only: the `agent/status` and `agent/disposed` events, plus `Agent.session`.
 import type {} from '@deepseek-ai/dsh-agent'
-// Type-only: the `approval/request` and `user-questions/request` answerer waterfals.
+// Type-only: the `approval/request` and `user-questions/request` answerer waterfalls.
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-user-questions'
 // Type-only: `ctx.sessionTitle`, the Session display title a push is headed by.
@@ -37,6 +37,7 @@ import {
   PUSH_METHODS,
   pushFacts,
   resolveEndpoint,
+  readPushDraft,
   sendPush,
   testFacts,
   type PushHeader,
@@ -176,48 +177,6 @@ function installPush(ctx: Context, config: Config): void {
   })
 }
 
-/** One header row read off an untrusted JSON body. */
-function readHeaders(value: unknown): PushHeader[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  const rows: PushHeader[] = []
-  for (const row of value) {
-    if (typeof row !== 'object' || row === null) continue
-    const { name, value: header } = row as Record<string, unknown>
-    rows.push({ name: typeof name === 'string' ? name : '', value: typeof header === 'string' ? header : '' })
-  }
-  return rows
-}
-
-/** Read the test request's endpoint overrides off a decoded JSON body. */
-function readDraft(value: unknown): Partial<{
-  url: string
-  method: PushMethod
-  headers: PushHeader[]
-  body: string
-  icon: string
-}> {
-  if (typeof value !== 'object' || value === null) return {}
-  const body = value as Record<string, unknown>
-  const text = (key: string): string | undefined => {
-    const field = body[key]
-    return typeof field === 'string' && field !== '' ? field : undefined
-  }
-  const url = text('url')
-  const method = text('method')
-  const template = text('body')
-  const icon = text('icon')
-  const headers = readHeaders(body.headers)
-  return {
-    ...url === undefined ? {} : { url },
-    ...method === undefined || !PUSH_METHODS.includes(method as PushMethod)
-      ? {}
-      : { method: method as PushMethod },
-    ...headers === undefined ? {} : { headers },
-    ...template === undefined ? {} : { body: template },
-    ...icon === undefined ? {} : { icon },
-  }
-}
-
 /**
  * Deliver one test push to the endpoint named by the request, falling back to
  * the saved Config for fields the card left untouched.
@@ -227,7 +186,7 @@ function readDraft(value: unknown): Partial<{
  */
 async function handleTest(config: Config, request: Request): Promise<Response> {
   const body = await request.json().catch((): undefined => undefined)
-  const draft = readDraft(body)
+  const draft = readPushDraft(body)
   const target = resolveEndpoint(
     draft.url ?? config.endpointUrl.get(),
     draft.method ?? config.endpointMethod.get(),
@@ -244,7 +203,7 @@ async function handleTest(config: Config, request: Request): Promise<Response> {
 
 /**
  * Serve the settings card's test delivery. The route rides Connection's
- * authenticated `/api` fence, so only this page can ask the Host to send.
+ * authenticated `/api` fence, so callers must pass the Host authentication checks.
  * @param ctx - host plugin context.
  * @param config - live plugin Config.
  */

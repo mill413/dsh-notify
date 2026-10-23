@@ -11,6 +11,7 @@ import {
   PUSH_VARIABLES,
   pushFacts,
   renderBody,
+  readPushDraft,
   resolveEndpoint,
   sendPush,
   testFacts,
@@ -213,4 +214,24 @@ test('an empty body template sends no body', async () => {
   await sendPush({ url: 'https://example.com/n', method: 'POST', headers: [], body: '' }, FACTS, spy)
   assert.equal(seen?.body, undefined)
   assert.equal(seen?.headers, undefined)
+})
+
+test('prototype property names are not template variables', () => {
+  assert.equal(renderBody('{{constructor}} {{toString}} {{__proto__}}', FACTS),
+    '{{constructor}} {{toString}} {{__proto__}}')
+})
+
+test('malformed destinations and URL credentials are rejected before sending', () => {
+  for (const url of ['https://', 'http://[invalid', 'file:///tmp/notify', 'https://user:password@example.com/notify']) {
+    assert.equal(resolveEndpoint(url, 'POST', [], ''), undefined, url)
+  }
+  assert.equal(resolveEndpoint('http://127.0.0.1:8080/notify', 'POST', [], '')?.url,
+    'http://127.0.0.1:8080/notify')
+})
+
+test('test drafts preserve explicitly cleared fields instead of using saved settings', () => {
+  assert.deepEqual(readPushDraft({ url: '', body: '', icon: '', headers: [] }),
+    { url: '', body: '', icon: '', headers: [] })
+  assert.deepEqual(readPushDraft({ url: 42, method: 'DELETE', body: null }), {})
+  assert.deepEqual(readPushDraft(undefined), {})
 })

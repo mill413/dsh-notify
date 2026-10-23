@@ -56,7 +56,7 @@ export interface PushFacts {
   readonly sessionId: string
   /** Trigger time, ISO 8601. */
   readonly time: string
-  /** Notification icon URL; empty when unset, in which case the field is dropped. */
+  /** Notification icon URL; empty when unset. */
   readonly icon: string
 }
 
@@ -110,7 +110,7 @@ export const PUSH_VARIABLES: readonly string[] = ['title', 'body', 'event', 'lev
  * @param subagent - whether the trigger came from a subagent.
  * @param sessionId - Session identity; empty for the test push.
  * @param now - timestamp in milliseconds.
- * @param icon - configured icon URL; empty drops the field from the payload.
+ * @param icon - configured icon URL; empty substitutes an empty string.
  * @returns the complete variable set for the body template.
  */
 export function pushFacts(
@@ -147,7 +147,7 @@ export function testFacts(now: number, icon = ''): PushFacts {
 /** Replace every known `{{name}}` placeholder; unknown ones stay verbatim. */
 function substitute(text: string, facts: PushFacts): string {
   return text.replace(/\{\{(\w+)\}\}/g, (whole, name: string) => {
-    const value: string | undefined = facts[name as keyof PushFacts]
+    const value = Object.hasOwn(facts, name) ? facts[name as keyof PushFacts] : undefined
     return value === undefined ? whole : value
   })
 }
@@ -199,7 +199,13 @@ export function resolveEndpoint(
   body: string,
 ): PushEndpoint | undefined {
   const target = url.trim()
-  if (!/^https?:\/\//i.test(target)) return undefined
+  try {
+    const parsed = new URL(target)
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname
+      || parsed.username || parsed.password) return undefined
+  } catch {
+    return undefined
+  }
   return {
     url: target,
     method,
@@ -268,4 +274,46 @@ export async function sendPush(
   }
   const value = await response.json().catch((): undefined => undefined) as AnswerBody | undefined
   return outcomeOf(response.status, value)
+}
+
+/** One header row read off an untrusted JSON body. */
+function readHeaders(value: unknown): PushHeader[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const rows: PushHeader[] = []
+  for (const row of value) {
+    if (typeof row !== 'object' || row === null) continue
+    const { name, value: header } = row as Record<string, unknown>
+    rows.push({ name: typeof name === 'string' ? name : '', value: typeof header === 'string' ? header : '' })
+  }
+  return rows
+}
+
+/** Read the test request's endpoint overrides off a decoded JSON body. */
+export function readPushDraft(value: unknown): Partial<{
+  url: string
+  method: PushMethod
+  headers: PushHeader[]
+  body: string
+  icon: string
+}> {
+  if (typeof value !== 'object' || value === null) return {}
+  const body = value as Record<string, unknown>
+  const text = (key: string): string | undefined => {
+    const field = body[key]
+    return typeof field === 'string' ? field : undefined
+  }
+  const url = text('url')
+  const method = text('method')
+  const template = text('body')
+  const icon = text('icon')
+  const headers = readHeaders(body.headers)
+  return {
+    ...url === undefined ? {} : { url },
+    ...method === undefined || !PUSH_METHODS.includes(method as PushMethod)
+      ? {}
+      : { method: method as PushMethod },
+    ...headers === undefined ? {} : { headers },
+    ...template === undefined ? {} : { body: template },
+    ...icon === undefined ? {} : { icon },
+  }
 }

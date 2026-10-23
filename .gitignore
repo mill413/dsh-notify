@@ -3,3 +3,9 @@ lib
 .client-build
 *.tgz
 .local-verify
+dist
+coverage
+.env
+.env.*
+!.env.example
+*.log
